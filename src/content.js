@@ -907,9 +907,23 @@ async function prepareBuy(panel, contractAddress, amount) {
       2,
     );
   } catch (error) {
-    output.textContent = error?.message || "based.bid buy failed.";
+    renderBuyError(output, contractAddress, error);
   } finally {
     if (state.openPanel === panel && panel.dataset.tokenValid === "true") setBuyDisabled(panel, false);
+  }
+}
+
+function renderBuyError(output, contractAddress, error) {
+  const message = error?.message || "based.bid buy failed.";
+  output.replaceChildren();
+  const text = document.createElement("span");
+  text.textContent = message;
+  output.appendChild(text);
+
+  if (/lbp|token not found|not a based\.bid/i.test(message)) {
+    const link = createExternalLink(`https://trade.based.bid/robinhood/${contractAddress}`, "Buy on based.bid");
+    output.appendChild(document.createElement("br"));
+    output.appendChild(link);
   }
 }
 
