@@ -1,0 +1,638 @@
+[
+  {
+    "inputs": [
+      {
+        "internalType": "string",
+        "name": "name",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "symbol",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "metaData",
+        "type": "string"
+      },
+      {
+        "internalType": "uint256",
+        "name": "initialBuyAmount",
+        "type": "uint256"
+      },
+      {
+        "components": [
+          {
+            "internalType": "address",
+            "name": "positionManager",
+            "type": "address"
+          },
+          {
+            "internalType": "uint24",
+            "name": "feeTier",
+            "type": "uint24"
+          },
+          {
+            "internalType": "uint8",
+            "name": "decimals",
+            "type": "uint8"
+          },
+          {
+            "internalType": "bool",
+            "name": "isTokenBurn",
+            "type": "bool"
+          },
+          {
+            "internalType": "uint8",
+            "name": "_padding1",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint256",
+            "name": "virtualEth",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "totalSupply",
+            "type": "uint256"
+          },
+          {
+            "internalType": "address",
+            "name": "baseToken",
+            "type": "address"
+          },
+          {
+            "internalType": "uint8",
+            "name": "_padding2",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint256",
+            "name": "maxWalletAmount",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "maxTxAmount",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "protectBlocks",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint160",
+            "name": "sqrtPriceX96_1",
+            "type": "uint160"
+          },
+          {
+            "internalType": "uint8",
+            "name": "_padding3",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint160",
+            "name": "sqrtPriceX96_2",
+            "type": "uint160"
+          },
+          {
+            "internalType": "uint8",
+            "name": "_padding4",
+            "type": "uint8"
+          },
+          {
+            "internalType": "int24",
+            "name": "tickLower_1",
+            "type": "int24"
+          },
+          {
+            "internalType": "int24",
+            "name": "tickUpper_1",
+            "type": "int24"
+          },
+          {
+            "internalType": "int24",
+            "name": "tickLower_2",
+            "type": "int24"
+          },
+          {
+            "internalType": "int24",
+            "name": "tickUpper_2",
+            "type": "int24"
+          },
+          {
+            "internalType": "uint8",
+            "name": "_padding5",
+            "type": "uint8"
+          }
+        ],
+        "internalType": "struct FlashLaunchV4PoolInitialData",
+        "name": "poolInitialData",
+        "type": "tuple"
+      },
+      {
+        "internalType": "string",
+        "name": "subBoardTitle",
+        "type": "string"
+      },
+      {
+        "internalType": "bytes",
+        "name": "initCode",
+        "type": "bytes"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "salt",
+        "type": "bytes32"
+      },
+      {
+        "components": [
+          {
+            "internalType": "bool",
+            "name": "hasV4Hook",
+            "type": "bool"
+          },
+          {
+            "components": [
+              {
+                "internalType": "uint16",
+                "name": "liquidityFeeBps",
+                "type": "uint16"
+              },
+              {
+                "internalType": "uint16",
+                "name": "buybackFeeBps",
+                "type": "uint16"
+              },
+              {
+                "internalType": "uint16",
+                "name": "rewardFeeBps",
+                "type": "uint16"
+              },
+              {
+                "internalType": "address[]",
+                "name": "customWallets",
+                "type": "address[]"
+              },
+              {
+                "internalType": "uint16[]",
+                "name": "customWalletBps",
+                "type": "uint16[]"
+              }
+            ],
+            "internalType": "struct HookFeeDistributionData",
+            "name": "hookFeeDistributionConfig",
+            "type": "tuple"
+          },
+          {
+            "internalType": "uint256",
+            "name": "feeThreshold",
+            "type": "uint256"
+          },
+          {
+            "internalType": "address",
+            "name": "rewardToken",
+            "type": "address"
+          },
+          {
+            "components": [
+              {
+                "internalType": "Currency",
+                "name": "currency0",
+                "type": "address"
+              },
+              {
+                "internalType": "Currency",
+                "name": "currency1",
+                "type": "address"
+              },
+              {
+                "internalType": "uint24",
+                "name": "fee",
+                "type": "uint24"
+              },
+              {
+                "internalType": "int24",
+                "name": "tickSpacing",
+                "type": "int24"
+              },
+              {
+                "internalType": "contract IHooks",
+                "name": "hooks",
+                "type": "address"
+              }
+            ],
+            "internalType": "struct PoolKey",
+            "name": "rewardPoolKey",
+            "type": "tuple"
+          },
+          {
+            "internalType": "enum IBasedBidHook.FeeKind",
+            "name": "feeKind",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint24",
+            "name": "staticPoolFeeBpsBuy",
+            "type": "uint24"
+          },
+          {
+            "internalType": "uint24",
+            "name": "staticPoolFeeBpsSell",
+            "type": "uint24"
+          },
+          {
+            "internalType": "uint24",
+            "name": "hookFeeBpsBuy",
+            "type": "uint24"
+          },
+          {
+            "internalType": "uint24",
+            "name": "hookFeeBpsSell",
+            "type": "uint24"
+          },
+          {
+            "components": [
+              {
+                "internalType": "uint24",
+                "name": "minBaseFeeBpsBuy",
+                "type": "uint24"
+              },
+              {
+                "internalType": "uint24",
+                "name": "minBaseFeeBpsSell",
+                "type": "uint24"
+              },
+              {
+                "internalType": "uint24",
+                "name": "maxBaseFeeBpsBuy",
+                "type": "uint24"
+              },
+              {
+                "internalType": "uint24",
+                "name": "maxBaseFeeBpsSell",
+                "type": "uint24"
+              },
+              {
+                "internalType": "uint32",
+                "name": "baseFeeFactorBuy",
+                "type": "uint32"
+              },
+              {
+                "internalType": "uint32",
+                "name": "baseFeeFactorSell",
+                "type": "uint32"
+              },
+              {
+                "internalType": "uint24",
+                "name": "defaultBaseFeeBpsBuy",
+                "type": "uint24"
+              },
+              {
+                "internalType": "uint24",
+                "name": "defaultBaseFeeBpsSell",
+                "type": "uint24"
+              },
+              {
+                "internalType": "uint32",
+                "name": "surgeDecayPeriodSeconds",
+                "type": "uint32"
+              },
+              {
+                "internalType": "uint32",
+                "name": "surgeMultiplierPpm",
+                "type": "uint32"
+              },
+              {
+                "internalType": "bool",
+                "name": "perSwapMode",
+                "type": "bool"
+              },
+              {
+                "internalType": "uint32",
+                "name": "capAutoTuneStepPpm",
+                "type": "uint32"
+              },
+              {
+                "internalType": "uint32",
+                "name": "capAutoTuneIntervalSeconds",
+                "type": "uint32"
+              }
+            ],
+            "internalType": "struct IBasedBidHook.DynamicFeeConfig",
+            "name": "dynamicFeeConfig",
+            "type": "tuple"
+          },
+          {
+            "components": [
+              {
+                "internalType": "uint16[]",
+                "name": "buyFeesBps",
+                "type": "uint16[]"
+              },
+              {
+                "internalType": "uint16[]",
+                "name": "sellFeesBps",
+                "type": "uint16[]"
+              },
+              {
+                "internalType": "uint256[]",
+                "name": "buyFeeTierAmountLevels",
+                "type": "uint256[]"
+              },
+              {
+                "internalType": "uint256[]",
+                "name": "sellFeeTierAmountLevels",
+                "type": "uint256[]"
+              }
+            ],
+            "internalType": "struct IBasedBidHook.TieredFeeConfig",
+            "name": "tieredFeeConfig",
+            "type": "tuple"
+          },
+          {
+            "internalType": "uint48",
+            "name": "protectPeriod",
+            "type": "uint48"
+          },
+          {
+            "internalType": "uint256",
+            "name": "maxBuyPerOrigin",
+            "type": "uint256"
+          },
+          {
+            "internalType": "bool",
+            "name": "isAntiSandwich",
+            "type": "bool"
+          },
+          {
+            "internalType": "uint32",
+            "name": "cooldownSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint24",
+            "name": "penaltyFeeBps",
+            "type": "uint24"
+          },
+          {
+            "components": [
+              {
+                "internalType": "uint32",
+                "name": "volumeIntervalSeconds",
+                "type": "uint32"
+              },
+              {
+                "internalType": "uint256[]",
+                "name": "volumeLevels",
+                "type": "uint256[]"
+              },
+              {
+                "internalType": "uint16[]",
+                "name": "volumeMultiplierBps",
+                "type": "uint16[]"
+              }
+            ],
+            "internalType": "struct IBasedBidHook.VolumeConfig",
+            "name": "volumeConfig",
+            "type": "tuple"
+          }
+        ],
+        "internalType": "struct V4HookData",
+        "name": "v4HookData",
+        "type": "tuple"
+      },
+      {
+        "internalType": "uint256",
+        "name": "minTokenBalanceForDividends",
+        "type": "uint256"
+      },
+      {
+        "components": [
+          {
+            "internalType": "bool",
+            "name": "isWhitelist",
+            "type": "bool"
+          },
+          {
+            "internalType": "uint256",
+            "name": "maxBuyPerOrigin",
+            "type": "uint256"
+          }
+        ],
+        "internalType": "struct WhitelistOptionForHookBuy",
+        "name": "whitelistOptionForHookBuy",
+        "type": "tuple"
+      },
+      {
+        "components": [
+          {
+            "internalType": "bool",
+            "name": "isSwapAll",
+            "type": "bool"
+          },
+          {
+            "internalType": "uint8",
+            "name": "swapForRewardNo",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint16[]",
+            "name": "RWAPercentsBps",
+            "type": "uint16[]"
+          },
+          {
+            "components": [
+              {
+                "components": [
+                  {
+                    "internalType": "Currency",
+                    "name": "currency0",
+                    "type": "address"
+                  },
+                  {
+                    "internalType": "Currency",
+                    "name": "currency1",
+                    "type": "address"
+                  },
+                  {
+                    "internalType": "uint24",
+                    "name": "fee",
+                    "type": "uint24"
+                  },
+                  {
+                    "internalType": "int24",
+                    "name": "tickSpacing",
+                    "type": "int24"
+                  },
+                  {
+                    "internalType": "contract IHooks",
+                    "name": "hooks",
+                    "type": "address"
+                  }
+                ],
+                "internalType": "struct PoolKey[]",
+                "name": "hops",
+                "type": "tuple[]"
+              }
+            ],
+            "internalType": "struct IBasedBidHook.RewardPath[]",
+            "name": "paths",
+            "type": "tuple[]"
+          }
+        ],
+        "internalType": "struct IBasedBidHook.RWASwapConfig",
+        "name": "rewardSwapConfig",
+        "type": "tuple"
+      },
+      {
+        "internalType": "string[]",
+        "name": "customWalletLabels",
+        "type": "string[]"
+      },
+      {
+        "components": [
+          {
+            "internalType": "bool",
+            "name": "isSwapAll",
+            "type": "bool"
+          },
+          {
+            "internalType": "uint8",
+            "name": "swapForRewardNo",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint16[]",
+            "name": "RWAPercentsBps",
+            "type": "uint16[]"
+          },
+          {
+            "components": [
+              {
+                "components": [
+                  {
+                    "internalType": "Currency",
+                    "name": "currency0",
+                    "type": "address"
+                  },
+                  {
+                    "internalType": "Currency",
+                    "name": "currency1",
+                    "type": "address"
+                  },
+                  {
+                    "internalType": "uint24",
+                    "name": "fee",
+                    "type": "uint24"
+                  },
+                  {
+                    "internalType": "int24",
+                    "name": "tickSpacing",
+                    "type": "int24"
+                  },
+                  {
+                    "internalType": "contract IHooks",
+                    "name": "hooks",
+                    "type": "address"
+                  }
+                ],
+                "internalType": "struct PoolKey[]",
+                "name": "hops",
+                "type": "tuple[]"
+              }
+            ],
+            "internalType": "struct IBasedBidHook.RewardPath[]",
+            "name": "paths",
+            "type": "tuple[]"
+          }
+        ],
+        "internalType": "struct IBasedBidHook.RWASwapConfig[]",
+        "name": "customWalletSwapConfigs",
+        "type": "tuple[]"
+      },
+      {
+        "internalType": "address[]",
+        "name": "distributionWallets",
+        "type": "address[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "distributionAmounts",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "bool",
+        "name": "isExternalFeeTrigger",
+        "type": "bool"
+      },
+      {
+        "components": [
+          {
+            "internalType": "uint32",
+            "name": "cooldownSeconds",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "tradingStart",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "tradingEnd",
+            "type": "uint32"
+          }
+        ],
+        "internalType": "struct TokenOptionData",
+        "name": "tokenOption",
+        "type": "tuple"
+      },
+      {
+        "components": [
+          {
+            "internalType": "string",
+            "name": "description",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "website",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "image",
+            "type": "string"
+          },
+          {
+            "internalType": "bytes",
+            "name": "extraData",
+            "type": "bytes"
+          }
+        ],
+        "internalType": "struct TokenMetadata",
+        "name": "metadata",
+        "type": "tuple"
+      },
+      {
+        "internalType": "bool",
+        "name": "isDefaultExcludedFromReward",
+        "type": "bool"
+      }
+    ],
+    "name": "customFlashLaunchV4",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "coin_address",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "payable",
+    "type": "function"
+  }
+]

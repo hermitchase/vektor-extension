@@ -1,26 +1,66 @@
 # VEKTOR Meme Launcher Extension
 
-VEKTOR is a browser extension for spotting memeable X/Twitter posts and turning them into launch-ready token plans.
+VEKTOR is a browser extension for spotting memeable X/Twitter posts, generating launch-ready token plans, and launching meme tokens on Robinhood Chain through based.bid.
 
 ## Features
 
 - Adds VEKTOR actions to high-signal X/Twitter posts.
-- Scores posts using visible engagement, memeability, timing, originality, and risk signals.
-- Generates token name, ticker, meme thesis, launch copy, image prompt, risk flags, and launch steps.
-- Detects EVM contract addresses in primary posts and profile bios.
-- Shows a quick-buy speed dial with saved preset amounts and a custom amount field.
-- Includes a full dashboard for wallet status and quick-buy presets.
+- Scores posts using visible engagement, memeability, timing, and originality.
+- Generates a full launch package: token name, ticker, bio, launch copy, art prompt, and watch-outs.
+- Lets you edit project info before launching (name, ticker, bio, X, website, Telegram, market cap, supply, initial buy).
+- Logo support: use an image from the post (picks between multiple images), upload your own, or generate one with AI.
+- Launches the token on Robinhood Chain through based.bid, signed by your own wallet.
+- Quick-buy panel for EVM contract addresses found in posts and bios.
+- Dashboard with wallet status, launch history per wallet, and quick-buy presets.
+
+## Install
+
+No coding needed. Download the package for your browser, unzip it, and load it in your browser. This is a manual install because the extension is not in the add-on stores yet.
+
+### Chrome / Chromium
+
+1. Download `vektor-chrome.zip` and unzip it to a folder you'll keep (for example `Documents/vektor-chrome`).
+2. Open `chrome://extensions`.
+3. Turn on **Developer mode** (top right).
+4. Click **Load unpacked** and select the unzipped `vektor-chrome` folder.
+5. Open `https://x.com` and reload the tab.
+
+### Firefox
+
+1. Download `vektor-firefox.zip` and unzip it anywhere.
+2. Open `about:debugging#/runtime/this-firefox`.
+3. Click **Load Temporary Add-on…**.
+4. Select the `manifest.json` inside the unzipped folder.
+5. Open `https://x.com` and reload the tab.
+
+Firefox temporary add-ons are removed when Firefox closes, so repeat steps 2–4 after a restart. Store installs (one click) will replace this once approved.
+
+## Usage
+
+1. Connect your wallet from the VEKTOR popup or dashboard, and approve Robinhood Chain.
+2. On X/Twitter, high-signal posts show an action button:
+   - `Ask VEKTOR` for medium-signal posts (analysis only).
+   - `Launch meme` for strong posts (full launch package).
+3. Click it, review the package, edit `Project info`, and pick a logo.
+4. Click `Launch token on Robinhood` and confirm the transaction in your wallet.
+5. The result shows the new token contract address and links to based.bid and the Robinhood explorer.
 
 ## Dashboard
 
-Open the extension popup, then select `Open VEKTOR dashboard`.
-
-From the dashboard you can:
+Open the extension popup, then select `Open VEKTOR dashboard`. From there you can:
 
 - Connect or disconnect a browser wallet.
 - Check Robinhood Chain wallet status.
+- See launch history for the connected wallet (token address, based.bid link, explorer link).
 - Set quick-buy preset amounts.
-- Review the active button/scoring behavior.
+
+Launch history is stored locally in your browser and grouped by wallet address.
+
+## How it works
+
+- The extension talks to a VEKTOR server that generates plans with an AI model and prepares based.bid launch/buy transactions.
+- Transactions are signed and sent by your wallet on Robinhood Chain. VEKTOR never has access to your private keys or seed phrase.
+- The post you act on (text and images) is sent to the VEKTOR server for AI processing.
 
 ## Robinhood Chain
 
@@ -29,35 +69,20 @@ From the dashboard you can:
 - Native gas token: `ETH`
 - Explorer: `https://robin.etherscan.io`
 
-## Local Development
+## For maintainers (building the packages)
 
-Install dependencies:
+Only needed if you are building the downloadable zips yourself. End users do not run any of this.
 
 ```bash
 npm install
-```
-
-Run checks:
-
-```bash
 npm run check
 npm run lint:firefox
+npm run build:zips
 ```
 
-Run the extension in a temporary Firefox profile:
+`npm run build:zips` creates:
 
-```bash
-npm run run:firefox
-```
+- `web-ext-artifacts/vektor-firefox.zip` (Manifest V2)
+- `web-ext-artifacts/vektor-chrome.zip` (Manifest V3)
 
-Build a local extension zip:
-
-```bash
-npm run build:zip
-```
-
-## Current Limits
-
-- Token launch execution is not live yet.
-- Quick-buy execution is not live yet.
-- Generated plans should be reviewed before taking any onchain action.
+The server lives in `server/` and runs with `npm run server`.

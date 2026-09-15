@@ -13,6 +13,18 @@ const TOKEN_INFO_ENDPOINTS = [
   "http://thecheetah11.com/vektor-agent/api/token-info",
   "http://localhost:8787/api/token-info",
 ];
+const BASEDBID_BUY_PREVIEW_ENDPOINTS = [
+  "http://thecheetah11.com/vektor-agent/api/basedbid/buy-preview",
+  "http://localhost:8787/api/basedbid/buy-preview",
+];
+const BASEDBID_CREATE_FLASH_ENDPOINTS = [
+  "http://thecheetah11.com/vektor-agent/api/basedbid/create-flash",
+  "http://localhost:8787/api/basedbid/create-flash",
+];
+const ETH_PRICE_ENDPOINTS = [
+  "http://thecheetah11.com/vektor-agent/api/eth-price",
+  "http://localhost:8787/api/eth-price",
+];
 const ROBINHOOD_CHAIN = {
   name: "Robinhood Chain",
   chainId: "0x1237",
@@ -26,8 +38,8 @@ const ROBINHOOD_CHAIN = {
 };
 
 chrome.runtime.onInstalled.addListener(async () => {
-  const current = await chrome.storage.local.get(Object.keys(DEFAULT_SETTINGS));
-  await chrome.storage.local.set({ ...DEFAULT_SETTINGS, ...current });
+  const current = await getStorage(Object.keys(DEFAULT_SETTINGS));
+  await setStorage({ ...DEFAULT_SETTINGS, ...current });
 });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -48,10 +60,31 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       .catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
   }
+
+  if (message?.type === "GET_ETH_PRICE") {
+    getEthPrice()
+      .then((result) => sendResponse({ ok: true, result }))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+
+  if (message?.type === "PREPARE_BASEDBID_BUY") {
+    prepareBasedBidBuy(message.payload)
+      .then((result) => sendResponse({ ok: true, result }))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+
+  if (message?.type === "PREPARE_BASEDBID_FLASH_LAUNCH") {
+    prepareBasedBidFlashLaunch(message.payload)
+      .then((result) => sendResponse({ ok: true, result }))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
 });
 
 async function generateTokenPlan(payload) {
-  const settings = await chrome.storage.local.get(Object.keys(DEFAULT_SETTINGS));
+  const settings = await getStorage(Object.keys(DEFAULT_SETTINGS));
   const tweetText = payload?.tweetText?.trim();
   if (!tweetText) throw new Error("No tweet text captured.");
 
@@ -60,6 +93,60 @@ async function generateTokenPlan(payload) {
 
 async function getTokenInfo(contractAddress) {
   return postToFirstAvailable(TOKEN_INFO_ENDPOINTS, { contractAddress }, "No token info service is reachable.", { stringifyResult: false });
+}
+
+async function prepareBasedBidBuy(payload) {
+  const settings = await getStorage(Object.keys(DEFAULT_SETTINGS));
+  return postToFirstAvailable(
+    BASEDBID_BUY_PREVIEW_ENDPOINTS,
+    {
+      ...payload,
+      account: payload?.account || settings.walletAddress || "",
+    },
+    "No based.bid preview service is reachable.",
+    { stringifyResult: false },
+  );
+}
+
+async function prepareBasedBidFlashLaunch(payload) {
+  const settings = await getStorage(Object.keys(DEFAULT_SETTINGS));
+  return postToFirstAvailable(
+    BASEDBID_CREATE_FLASH_ENDPOINTS,
+    {
+      ...payload,
+      account: payload?.account || settings.walletAddress || "",
+    },
+    "No based.bid launch service is reachable.",
+    { stringifyResult: false },
+  );
+}
+
+async function getEthPrice() {
+  return getFromFirstAvailable(ETH_PRICE_ENDPOINTS, "No ETH price service is reachable.");
+}
+
+function getStorage(keys) {
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.get(keys, (result) => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+        return;
+      }
+      resolve(result || {});
+    });
+  });
+}
+
+function setStorage(payload) {
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.set(payload, () => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+        return;
+      }
+      resolve();
+    });
+  });
 }
 
 async function callAgentProxy(settings, payload) {
@@ -75,7 +162,7 @@ async function callAgentProxy(settings, payload) {
 }
 
 async function postToFirstAvailable(endpoints, payload, fallbackMessage, options = {}) {
-  let lastError = null;
+  const failures = [];
 
   for (const endpoint of endpoints) {
     try {
@@ -92,9 +179,24 @@ async function postToFirstAvailable(endpoints, payload, fallbackMessage, options
       if (!options.stringifyResult) return data.result;
       return typeof data.result === "string" ? data.result : JSON.stringify(data.result, null, 2);
     } catch (error) {
-      lastError = error;
+      failures.push(`${endpoint}: ${error?.message || "request failed"}`);
     }
   }
 
-  throw new Error(lastError?.message || fallbackMessage);
+  throw new Error(failures.length ? failures.join("\n") : fallbackMessage);
+}
+
+async function getFromFirstAvailable(endpoints, fallbackMessage) {
+  const failures = [];
+  for (const endpoint of endpoints) {
+    try {
+      const response = await fetch(endpoint);
+      const data = await response.json();
+      if (!response.ok || !data?.ok) throw new Error(data?.error || `HTTP ${response.status}`);
+      return data.result;
+    } catch (error) {
+      failures.push(`${endpoint}: ${error?.message || "request failed"}`);
+    }
+  }
+  throw new Error(failures.length ? failures.join("\n") : fallbackMessage);
 }

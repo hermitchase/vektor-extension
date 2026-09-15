@@ -101,10 +101,22 @@
         </article>
 
         <article class="card wide">
+          <div class="card-head">
+            <div>
+              <p class="eyebrow">Launch history</p>
+              <h2 id="historyTitle">Your launches</h2>
+            </div>
+            <span id="historyCount">0</span>
+          </div>
+          <p class="copy small" id="historyOwner">Connect a wallet to see launches from that account.</p>
+          <div id="launchHistory" class="history-list"></div>
+        </article>
+
+        <article class="card wide">
           <p class="eyebrow">Wallet Bridge</p>
           <h2>How connection works</h2>
           <p class="copy">Wallet extensions normally inject providers into regular web pages, not extension pages. VEKTOR uses the X/Twitter tab as the bridge: this dashboard sends a request to the content script, the page asks MetaMask or another EVM wallet for accounts, then VEKTOR stores the public address and chain ID.</p>
-          <p class="copy">Quick buy detects EVM contract addresses in primary posts and profile bios. Execution is waiting on swap/router API details.</p>
+          <p class="copy">Launches and buys are prepared by the VEKTOR server through based.bid, then signed and sent by your wallet on Robinhood Chain. VEKTOR never holds your keys.</p>
         </article>
       </section>
     </main>

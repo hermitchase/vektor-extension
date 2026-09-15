@@ -13,16 +13,48 @@ const state = {
 const ASK_THRESHOLD = 50;
 const LAUNCH_THRESHOLD = 70;
 const CONTRACT_ADDRESS_PATTERN = /\b0x[a-fA-F0-9]{40}\b/g;
+const AGENT_PROXY_ENDPOINTS = [
+  "http://thecheetah11.com/vektor-agent/api/generate-token-plan",
+  "http://localhost:8787/api/generate-token-plan",
+];
+const BASEDBID_CREATE_FLASH_ENDPOINTS = [
+  "http://thecheetah11.com/vektor-agent/api/basedbid/create-flash",
+  "http://localhost:8787/api/basedbid/create-flash",
+];
+const ETH_PRICE_ENDPOINTS = [
+  "http://thecheetah11.com/vektor-agent/api/eth-price",
+  "http://localhost:8787/api/eth-price",
+];
+const LAUNCH_RECEIPT_ENDPOINTS = [
+  "http://thecheetah11.com/vektor-agent/api/basedbid/launch-receipt",
+  "http://localhost:8787/api/basedbid/launch-receipt",
+];
+const IMAGE_GEN_ENDPOINTS = [
+  "http://thecheetah11.com/vektor-agent/api/generate-image",
+  "http://localhost:8787/api/generate-image",
+];
+
+let scanScheduled = false;
 
 function init() {
   setupWalletBridge();
+  scanTweets();
+  const observer = new MutationObserver(scheduleScan);
+  observer.observe(document.body, { childList: true, subtree: true });
+}
+
+function scheduleScan() {
+  if (scanScheduled) return;
+  scanScheduled = true;
+  setTimeout(() => {
+    scanScheduled = false;
+    scanTweets();
+  }, 400);
+}
+
+function scanTweets() {
   injectButtons();
   injectBuyButtons();
-  const observer = new MutationObserver(() => {
-    injectButtons();
-    injectBuyButtons();
-  });
-  observer.observe(document.body, { childList: true, subtree: true });
 }
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -78,6 +110,35 @@ function requestWallet(chain) {
   });
 }
 
+function requestWalletTransaction(chain, transaction) {
+  return new Promise((resolve, reject) => {
+    const requestId = `vektor-tx-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+    const timeout = setTimeout(() => {
+      window.removeEventListener(requestId, onResponse);
+      reject(new Error("Wallet transaction request timed out."));
+    }, 60000);
+
+    function onResponse(event) {
+      clearTimeout(timeout);
+      window.removeEventListener(requestId, onResponse);
+      const detail = event.detail || {};
+      if (detail.error) {
+        reject(new Error(detail.error));
+        return;
+      }
+      if (!detail.transactionHash) {
+        reject(new Error("Wallet returned no transaction hash."));
+        return;
+      }
+      resolve({ address: detail.address, transactionHash: detail.transactionHash });
+    }
+
+    window.addEventListener(requestId, onResponse);
+    window.postMessage({ source: "VEKTOR_CONTENT_WALLET_REQUEST", action: "SEND_TRANSACTION", requestId, chain, transaction }, "*");
+  });
+}
+
 function injectButtons() {
   document.querySelectorAll(SELECTORS.tweet).forEach((tweet) => {
     if (tweet.querySelector(".vektor-launch-button")) return;
@@ -91,12 +152,13 @@ function injectButtons() {
     button.type = "button";
     const analytics = analyzeLaunchFit(tweet, tweetText);
     if (analytics.launchFitScore < ASK_THRESHOLD) return;
-    button.textContent = analytics.launchFitScore >= LAUNCH_THRESHOLD ? "Launch meme" : "Ask VEKTOR";
-    button.title = "Generate a memecoin plan from this post";
+    const action = analytics.launchFitScore >= LAUNCH_THRESHOLD ? "launch" : "ask";
+    button.textContent = action === "launch" ? "Launch meme" : "Ask VEKTOR";
+    button.title = action === "launch" ? "Prepare a launch package from this post" : "Ask VEKTOR if this post is worth launching";
     button.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
-      openPanel(tweet);
+      openPanel(tweet, action);
     });
 
     const target = tweet.querySelector('[role="group"]') || tweet;
@@ -166,26 +228,28 @@ function isLaunchablePost(tweet) {
   return true;
 }
 
-function openPanel(tweet) {
+function openPanel(tweet, action) {
   closePanel();
 
   const payload = {
     tweetText: getTweetText(tweet),
     author: getAuthor(tweet),
     tweetUrl: getTweetUrl(tweet),
+    imageUrls: getTweetImageUrls(tweet),
     analytics: analyzeLaunchFit(tweet, getTweetText(tweet)),
+    intent: action === "launch" ? "prepare_launch" : "analyze_only",
   };
   payload.score = payload.analytics.launchFitScore;
 
   const panel = document.createElement("section");
   panel.className = "vektor-panel";
   panel.append(
-    createHeader(),
+    createHeader(action),
     createSignal(payload.analytics),
     createBreakdown(payload.analytics),
     createTweetQuote(payload.tweetText),
     createExtraInput(),
-    createGenerateButton(),
+    createGenerateButton(action),
     createOutput(),
   );
 
@@ -199,7 +263,7 @@ function openPanel(tweet) {
 
 async function openBuyPanel(contractAddress, source) {
   closePanel();
-  const settings = await chrome.storage.local.get(["quickBuyAmounts", "walletAddress", "walletChainId"]);
+  const settings = await getStorage(["quickBuyAmounts", "walletAddress", "walletChainId"]);
   const amounts = normalizeQuickBuyAmounts(settings.quickBuyAmounts);
   const panel = document.createElement("section");
   panel.className = "vektor-panel";
@@ -254,20 +318,557 @@ async function generatePlan(panel, payload) {
   const extra = panel.querySelector(".vektor-extra").value.trim();
 
   button.disabled = true;
-  button.textContent = "Routing to agent...";
-  output.textContent = "Reading captured tweet and building launch package...";
+  button.textContent = payload.intent === "prepare_launch" ? "Preparing..." : "Asking...";
+  output.textContent = payload.intent === "prepare_launch" ? "Reading captured tweet and preparing a launch package..." : "Reading captured tweet and checking whether this is worth launching...";
 
-  chrome.runtime.sendMessage(
-    { type: "GENERATE_TOKEN_PLAN", payload: { ...payload, extraInstructions: extra } },
-    (response) => {
-      button.disabled = false;
-      button.textContent = "Generate launch plan";
-      output.textContent = response?.ok ? response.result : response?.error || "Agent failed.";
-    },
-  );
+  try {
+    const requestPayload = { ...payload, extraInstructions: extra };
+    const result = await generateTokenPlanWithFallback(requestPayload);
+    renderAgentResult(output, result, payload.intent, payload.imageUrls);
+  } catch (error) {
+    output.textContent = error?.message || "Agent failed without returning an error.";
+  } finally {
+    button.disabled = false;
+    button.textContent = "Generate launch plan";
+  }
 }
 
-function prepareBuy(panel, contractAddress, amount) {
+async function generateTokenPlanWithFallback(payload) {
+  try {
+    return await sendRuntimeMessage({ type: "GENERATE_TOKEN_PLAN", payload });
+  } catch (runtimeError) {
+    try {
+      return await postTextToFirstAvailable(AGENT_PROXY_ENDPOINTS, payload);
+    } catch (proxyError) {
+      throw new Error(`Extension route failed: ${runtimeError?.message || "unknown"}\nProxy route failed: ${proxyError?.message || "unknown"}`);
+    }
+  }
+}
+
+async function postTextToFirstAvailable(endpoints, payload) {
+  const result = await postJsonToFirstAvailable(endpoints, payload);
+  return typeof result === "string" ? result : JSON.stringify(result, null, 2);
+}
+
+async function postJsonToFirstAvailable(endpoints, payload) {
+  const failures = [];
+  for (const endpoint of endpoints) {
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await response.json();
+      if (!response.ok || !data?.ok) throw new Error(data?.error || `HTTP ${response.status}`);
+      return data.result;
+    } catch (error) {
+      failures.push(`${endpoint}: ${error?.message || "request failed"}`);
+    }
+  }
+  throw new Error(failures.join("\n") || "No VEKTOR proxy is reachable.");
+}
+
+function renderAgentResult(output, result, intent, imageUrls) {
+  const parsed = parseAgentResult(result);
+  if (!parsed) {
+    output.textContent = result;
+    return;
+  }
+  parsed.imageUrls = Array.isArray(imageUrls) ? imageUrls : [];
+
+  const wrap = document.createElement("div");
+  wrap.className = "vektor-result";
+  wrap.append(
+    createResultHero(parsed, intent),
+    createResultSection("Meme thesis", parsed.memeThesis),
+    createResultSection("Viral angle", parsed.viralAngle),
+    createResultSection("Launch copy", parsed.launchCopy, "copy"),
+    createResultSection("Art prompt", parsed.imagePrompt),
+    createResultList("Watch-outs", getUserRiskFlags(parsed.riskFlags)),
+    createResultSection("Next move", parsed.nextAction || getDefaultNextAction(parsed, intent)),
+    createLaunchConfig(parsed),
+  );
+  wrap.appendChild(createLaunchTokenButton(intent));
+  output.replaceWith(wrap);
+}
+
+function createLaunchConfig(plan) {
+  const section = document.createElement("section");
+  section.className = "vektor-launch-config";
+  const title = document.createElement("h3");
+  title.textContent = "Project info";
+  section.append(
+    title,
+    createLaunchInput("Name", "tokenName", plan.tokenName || ""),
+    createLaunchInput("Ticker", "ticker", plan.ticker || ""),
+    createLaunchTextarea("Bio", "description", plan.description || plan.memeThesis || ""),
+    createLaunchInput("X / Twitter", "twitter", plan.twitter || plan.tweetUrl || ""),
+    createLaunchInput("Website", "website", plan.website || ""),
+    createLaunchInput("Telegram", "telegram", plan.telegram || ""),
+    createLaunchInput("Market cap", "marketCap", "10000", "number"),
+    createLaunchInput("Supply", "totalSupply", "1000000000", "number"),
+    createLaunchInput("Initial buy USDT", "initialBuyUsd", "0", "number"),
+    createLogoField(plan.imageUrls, plan.imagePrompt),
+  );
+  setupInitialBuyConverter(section);
+  return section;
+}
+
+function createLogoField(imageUrls, imagePrompt) {
+  const wrap = document.createElement("div");
+  wrap.className = "vektor-logo";
+
+  const input = document.createElement("input");
+  input.name = "logoDataUrl";
+  input.type = "hidden";
+
+  const file = document.createElement("input");
+  file.type = "file";
+  file.accept = "image/png,image/jpeg,image/webp";
+  file.className = "vektor-logo-file";
+
+  const label = document.createElement("label");
+  label.textContent = "Logo";
+  label.appendChild(file);
+
+  const preview = document.createElement("img");
+  preview.className = "vektor-logo-preview";
+  preview.alt = "Token logo preview";
+
+  const options = document.createElement("div");
+  options.className = "vektor-logo-options";
+
+  function applyLogo(source, value) {
+    if (source === "post") {
+      input.value = "";
+      input.dataset.logoUrl = value;
+    } else {
+      input.value = value;
+      delete input.dataset.logoUrl;
+    }
+    preview.src = value;
+    preview.hidden = false;
+  }
+
+  const postImages = (Array.isArray(imageUrls) ? imageUrls : []).filter(Boolean).slice(0, 4);
+  if (postImages.length) {
+    const postLabel = document.createElement("span");
+    postLabel.className = "vektor-logo-post-label";
+    postLabel.textContent = postImages.length > 1 ? `Use a post image (${postImages.length})` : "Use post image";
+
+    const row = document.createElement("div");
+    row.className = "vektor-logo-thumbs";
+    postImages.forEach((url) => {
+      const thumb = document.createElement("button");
+      thumb.type = "button";
+      thumb.className = "vektor-logo-thumb";
+      thumb.title = "Use this post image as the logo";
+      const thumbImage = document.createElement("img");
+      thumbImage.src = url;
+      thumbImage.alt = "Post image option";
+      thumb.appendChild(thumbImage);
+      thumb.addEventListener("click", () => {
+        applyLogo("post", url);
+        row.querySelectorAll(".vektor-logo-thumb").forEach((node) => node.classList.toggle("selected", node === thumb));
+      });
+      row.appendChild(thumb);
+    });
+    options.append(postLabel, row);
+  }
+
+  file.addEventListener("change", async () => {
+    const chosen = file.files?.[0];
+    if (!chosen) return;
+    const dataUrl = await resizeImageToDataUrl(chosen, 512);
+    applyLogo("custom", dataUrl);
+  });
+
+  const generator = createImageGenerator(imagePrompt, applyLogo);
+  wrap.append(label, input, options, generator, preview);
+  preview.hidden = true;
+  return wrap;
+}
+
+function createImageGenerator(imagePrompt, applyLogo) {
+  const wrap = document.createElement("div");
+  wrap.className = "vektor-image-gen";
+
+  const heading = document.createElement("span");
+  heading.className = "vektor-image-gen-title";
+  heading.textContent = "Generate logo with AI";
+
+  const prompt = document.createElement("textarea");
+  prompt.className = "vektor-image-prompt";
+  prompt.placeholder = "Describe the token logo...";
+  prompt.value = imagePrompt || "";
+
+  const actions = document.createElement("div");
+  actions.className = "vektor-image-gen-actions";
+
+  const generate = document.createElement("button");
+  generate.type = "button";
+  generate.className = "vektor-logo-option";
+  generate.textContent = "Generate image";
+
+  const status = document.createElement("span");
+  status.className = "vektor-image-gen-status";
+
+  generate.addEventListener("click", async () => {
+    const value = prompt.value.trim();
+    if (value.length < 8) {
+      status.textContent = "Write a longer image prompt first.";
+      return;
+    }
+    generate.disabled = true;
+    status.textContent = "Generating image...";
+    try {
+      const result = await postJsonToFirstAvailable(IMAGE_GEN_ENDPOINTS, { prompt: value });
+      const compact = await downscaleDataUrl(result.dataUrl, 512);
+      applyLogo("custom", compact);
+      status.textContent = `Generated with ${result.source}. It's now your logo — generate again or upload to replace.`;
+      wrap.dataset.generated = "true";
+    } catch (error) {
+      status.textContent = error?.message || "Image generation failed.";
+    } finally {
+      generate.disabled = false;
+    }
+  });
+
+  actions.append(generate);
+  wrap.append(heading, prompt, actions, status);
+  return wrap;
+}
+
+function resizeImageToDataUrl(file, maxSize) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Could not read the logo file."));
+    reader.onload = () => {
+      downscaleDataUrl(reader.result, maxSize, "image/png").then(resolve, reject);
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function downscaleDataUrl(source, maxSize, outputType = "image/jpeg") {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onerror = () => reject(new Error("Could not load the logo image."));
+    image.onload = () => {
+      const scale = Math.min(1, maxSize / Math.max(image.width, image.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(image.width * scale));
+      canvas.height = Math.max(1, Math.round(image.height * scale));
+      const context = canvas.getContext("2d");
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL(outputType, 0.9));
+    };
+    image.src = source;
+  });
+}
+
+function createLaunchInput(labelText, name, value, type = "text") {
+  const label = document.createElement("label");
+  label.textContent = labelText;
+  const input = document.createElement("input");
+  input.name = name;
+  input.type = type;
+  input.value = value;
+  if (type === "number") input.min = "0";
+  if (name === "initialBuyUsd") input.step = "1";
+  label.appendChild(input);
+  return label;
+}
+
+async function setupInitialBuyConverter(section) {
+  const input = section.querySelector('[name="initialBuyUsd"]');
+  if (!input) return;
+
+  const hint = document.createElement("span");
+  hint.className = "vektor-usd-converter";
+  hint.textContent = "USD estimate loading...";
+  input.insertAdjacentElement("afterend", hint);
+
+  let price = null;
+  try {
+    price = await getEthPriceWithFallback();
+  } catch (_error) {
+    hint.textContent = "USD estimate unavailable";
+    return;
+  }
+
+  const update = () => {
+    const usd = Number(input.value || 0);
+    const eth = usd / Number(price.usd || 1);
+    hint.textContent = usd > 0 ? `≈ ${formatDisplayNumber(eth)} ETH` : "";
+  };
+  input.addEventListener("input", update);
+  update();
+}
+
+async function getEthPriceWithFallback() {
+  try {
+    return await sendRuntimeMessage({ type: "GET_ETH_PRICE" });
+  } catch (_runtimeError) {
+    return getJsonFromFirstAvailable(ETH_PRICE_ENDPOINTS);
+  }
+}
+
+async function getJsonFromFirstAvailable(endpoints) {
+  const failures = [];
+  for (const endpoint of endpoints) {
+    try {
+      const response = await fetch(endpoint);
+      const data = await response.json();
+      if (!response.ok || !data?.ok) throw new Error(data?.error || `HTTP ${response.status}`);
+      return data.result;
+    } catch (error) {
+      failures.push(`${endpoint}: ${error?.message || "request failed"}`);
+    }
+  }
+  throw new Error(failures.join("\n") || "No price service is reachable.");
+}
+
+function createLaunchTextarea(labelText, name, value) {
+  const label = document.createElement("label");
+  label.textContent = labelText;
+  const textarea = document.createElement("textarea");
+  textarea.name = name;
+  textarea.value = value;
+  label.appendChild(textarea);
+  return label;
+}
+
+function createLaunchTokenButton(intent) {
+  const button = document.createElement("button");
+  button.className = "vektor-launch-token-action";
+  button.type = "button";
+  button.textContent = intent === "prepare_launch" ? "Launch token on Robinhood" : "Launch anyway on Robinhood";
+  button.addEventListener("click", () => launchToken(button, getEditedLaunchPlan(button)));
+  return button;
+}
+
+function getEditedLaunchPlan(button) {
+  const config = button.closest(".vektor-result")?.querySelector(".vektor-launch-config");
+  const get = (name) => config?.querySelector(`[name="${name}"]`)?.value?.trim() || "";
+  const initialBuyUsd = Number(get("initialBuyUsd") || 0);
+  return {
+    tokenName: get("tokenName"),
+    ticker: get("ticker"),
+    marketCap: Number(get("marketCap") || 10000),
+    totalSupply: Number(get("totalSupply") || 1000000000),
+    initialBuyUsd,
+    description: get("description"),
+    twitter: get("twitter"),
+    website: get("website"),
+    telegram: get("telegram"),
+    logoDataUrl: get("logoDataUrl"),
+    logoUrl: config?.querySelector('[name="logoDataUrl"]')?.dataset.logoUrl || "",
+  };
+}
+
+async function launchToken(button, plan) {
+  const originalText = button.textContent;
+  button.disabled = true;
+  button.textContent = "Preparing based.bid launch...";
+
+  try {
+    button.dataset.stage = "wallet connect";
+    const chain = await getChainConfig();
+    const wallet = await requestWallet(chain);
+    button.dataset.stage = "based.bid prep";
+    const preview = await prepareFlashLaunchWithFallback({ ...plan, account: wallet.address });
+    button.dataset.stage = "wallet submit";
+    button.textContent = "Confirm launch in wallet...";
+    const sent = await requestWalletTransaction(chain, preview.transaction);
+    const block = createLaunchSubmittedBlock(sent.transactionHash, preview);
+    button.insertAdjacentElement("afterend", block);
+    button.textContent = "Launch submitted";
+    await recordLaunch({
+      wallet: wallet.address,
+      name: preview.tokenName,
+      ticker: preview.ticker,
+      txHash: sent.transactionHash,
+      explorerTxUrl: `https://robin.etherscan.io/tx/${sent.transactionHash}`,
+      createdAt: new Date().toISOString(),
+    });
+    resolveLaunchToken(block, sent.transactionHash, preview.ticker);
+  } catch (error) {
+    button.textContent = formatLaunchError(button.dataset.stage, error);
+    setTimeout(() => {
+      button.disabled = false;
+      button.textContent = originalText;
+    }, 4500);
+  }
+}
+
+async function prepareFlashLaunchWithFallback(payload) {
+  try {
+    return await sendRuntimeMessage({ type: "PREPARE_BASEDBID_FLASH_LAUNCH", payload });
+  } catch (_runtimeError) {
+    return postJsonToFirstAvailable(BASEDBID_CREATE_FLASH_ENDPOINTS, payload);
+  }
+}
+
+function formatLaunchError(stage, error) {
+  const message = error?.message || "An unexpected error occurred";
+  if (/An unexpected error occurred/i.test(message)) {
+    if (stage === "wallet connect") return "Wallet connect failed. Open MetaMask, enable it for X, then try again.";
+    if (stage === "wallet submit") return "Wallet submit failed. Switch MetaMask to Robinhood Chain and make sure it has ETH for gas.";
+    if (stage === "based.bid prep") return "based.bid launch prep failed. Try a shorter name/ticker.";
+  }
+  return `${stage || "Launch"} failed: ${message}`;
+}
+
+function createLaunchSubmittedBlock(transactionHash, preview) {
+  const block = document.createElement("section");
+  block.className = "vektor-result-section launch-submitted";
+  const heading = document.createElement("h3");
+  heading.textContent = "Launch submitted";
+  const body = document.createElement("p");
+  body.textContent = `${preview.tokenName} ($${preview.ticker}) transaction sent: ${transactionHash}`;
+  const link = document.createElement("a");
+  link.href = `https://robin.etherscan.io/tx/${transactionHash}`;
+  link.target = "_blank";
+  link.rel = "noreferrer";
+  link.textContent = "View on Robinhood Etherscan";
+  const status = document.createElement("p");
+  status.className = "vektor-launch-token-status";
+  status.textContent = "Reading token address from the chain...";
+  block.append(heading, body, link, status);
+  return block;
+}
+
+async function resolveLaunchToken(block, transactionHash, expectedSymbol) {
+  const status = block.querySelector(".vektor-launch-token-status");
+  for (let attempt = 0; attempt < 12; attempt++) {
+    try {
+      const result = await postJsonToFirstAvailable(LAUNCH_RECEIPT_ENDPOINTS, { txHash: transactionHash, expectedSymbol });
+      if (result?.status === "failed") {
+        status.textContent = "Launch transaction failed on-chain.";
+        return;
+      }
+      if (result?.status === "confirmed" && result.token) {
+        status.replaceWith(createLaunchTokenBlock(result.token));
+        await updateLaunchRecord(transactionHash, {
+          tokenAddress: result.token.address,
+          explorerUrl: result.token.explorerUrl,
+          basedBidUrl: result.token.basedBidUrl,
+        });
+        return;
+      }
+    } catch (_error) {
+      // retry
+    }
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+  }
+  status.textContent = "Token confirmed, but the address could not be read yet. Open the transaction on Robinhood Etherscan.";
+}
+
+function createLaunchTokenBlock(token) {
+  const block = document.createElement("section");
+  block.className = "vektor-result-section launch-token";
+  const heading = document.createElement("h3");
+  heading.textContent = "Token live";
+  const body = document.createElement("p");
+  body.textContent = `${token.name} ($${token.symbol})`;
+
+  const ca = document.createElement("strong");
+  ca.className = "vektor-token-ca";
+  ca.textContent = token.address;
+
+  const links = document.createElement("div");
+  links.className = "vektor-token-links";
+  links.append(
+    createExternalLink(token.basedBidUrl, "Trade on based.bid"),
+    createExternalLink(token.explorerUrl, "Robinhood Etherscan"),
+  );
+
+  block.append(heading, body, ca, links);
+  return block;
+}
+
+function createExternalLink(href, text) {
+  const link = document.createElement("a");
+  link.href = href;
+  link.target = "_blank";
+  link.rel = "noreferrer";
+  link.textContent = text;
+  return link;
+}
+
+function getUserRiskFlags(riskFlags) {
+  const flags = Array.isArray(riskFlags) ? riskFlags : [];
+  return flags.filter((flag) => {
+    const text = String(flag || "").toLowerCase();
+    return !/no attached image|no image|image.*not captured|visual context|low visual|could not analyze.*image|image could not be analyzed|ip|trademark|copyright|endorsement|association|name-dropping|named .*brands?|real people|public figure|likeness|without consent|legal/.test(text);
+  });
+}
+
+function getDefaultNextAction(result, intent) {
+  if (intent !== "prepare_launch") return "Keep watching this meme until the signal is stronger.";
+  if (/watchlist|weak/i.test(result.launchReadiness || "")) return "Do not launch yet; use this as a draft unless you override the signal.";
+  return "Review the package, then use the launch action once based.bid deployment is connected.";
+}
+
+function parseAgentResult(result) {
+  if (!result) return null;
+  if (typeof result === "object") return result;
+  try {
+    return JSON.parse(result);
+  } catch (_error) {
+    const match = String(result).match(/\{[\s\S]*\}/);
+    if (!match) return null;
+    try {
+      return JSON.parse(match[0]);
+    } catch (__error) {
+      return null;
+    }
+  }
+}
+
+function createResultHero(result, intent) {
+  const hero = document.createElement("div");
+  hero.className = "vektor-result-hero";
+  const label = document.createElement("span");
+  label.textContent = intent === "prepare_launch" ? "Launch package" : "VEKTOR verdict";
+  const title = document.createElement("strong");
+  title.textContent = `${result.tokenName || "Untitled token"} ${result.ticker ? `($${result.ticker})` : ""}`;
+  const readiness = document.createElement("em");
+  readiness.textContent = result.launchReadiness || "Needs review";
+  hero.append(label, title, readiness);
+  return hero;
+}
+
+function createResultSection(title, value, variant = "") {
+  const section = document.createElement("section");
+  section.className = `vektor-result-section${variant ? ` ${variant}` : ""}`;
+  const heading = document.createElement("h3");
+  heading.textContent = title;
+  const body = document.createElement("p");
+  body.textContent = value || "Not provided.";
+  section.append(heading, body);
+  return section;
+}
+
+function createResultList(title, items, ordered = false) {
+  const section = document.createElement("section");
+  section.className = "vektor-result-section";
+  const heading = document.createElement("h3");
+  heading.textContent = title;
+  const list = document.createElement(ordered ? "ol" : "ul");
+  const values = Array.isArray(items) && items.length ? items : ["None flagged."];
+  values.forEach((item) => {
+    const li = document.createElement("li");
+    li.textContent = item;
+    list.appendChild(li);
+  });
+  section.append(heading, list);
+  return section;
+}
+
+async function prepareBuy(panel, contractAddress, amount) {
   const output = panel.querySelector(".vektor-output");
   if (panel.dataset.tokenValid !== "true") {
     output.textContent = "Token validation is required before buy prep. If this is a wallet address or non-ERC-20 contract, VEKTOR will not prepare a buy.";
@@ -278,17 +879,103 @@ function prepareBuy(panel, contractAddress, amount) {
     return;
   }
 
-  output.textContent = JSON.stringify(
-    {
-      status: "Ready for router integration",
-      contractAddress,
-      amountEth: amount,
-      chain: "Robinhood Chain",
-      next: "Connect swap/router API to execute this buy from VEKTOR.",
-    },
-    null,
-    2,
-  );
+  setBuyDisabled(panel, true);
+  output.textContent = `Preparing based.bid buy preview for ${amount} ETH...`;
+
+  try {
+    const chain = await getChainConfig();
+    const wallet = await requestWallet(chain);
+    const preview = await sendRuntimeMessage({
+      type: "PREPARE_BASEDBID_BUY",
+      payload: {
+        contractAddress,
+        amountEth: amount,
+        account: wallet.address,
+        slippage: 5,
+      },
+    });
+    output.textContent = "Preview ready. Confirm the Robinhood Chain transaction in your wallet.";
+    const sent = await requestWalletTransaction(chain, preview.transaction);
+    output.textContent = JSON.stringify(
+      {
+        status: "submitted",
+        transactionHash: sent.transactionHash,
+        explorerUrl: `https://robin.etherscan.io/tx/${sent.transactionHash}`,
+        basedBidUrl: preview.basedBidUrl,
+      },
+      null,
+      2,
+    );
+  } catch (error) {
+    output.textContent = error?.message || "based.bid buy failed.";
+  } finally {
+    if (state.openPanel === panel && panel.dataset.tokenValid === "true") setBuyDisabled(panel, false);
+  }
+}
+
+function getChainConfig() {
+  return sendRuntimeMessage({ type: "GET_CHAIN_CONFIG" });
+}
+
+function sendRuntimeMessage(message) {
+  return new Promise((resolve, reject) => {
+    chrome.runtime.sendMessage(message, (response) => {
+      if (chrome.runtime.lastError) {
+        const message = chrome.runtime.lastError.message || "Extension message failed.";
+        if (/Receiving end does not exist|Could not establish connection/i.test(message)) {
+          reject(new Error("VEKTOR was reloaded. Reload the X/Twitter tab, then try again."));
+          return;
+        }
+        reject(new Error(message));
+        return;
+      }
+      if (!response?.ok) {
+        reject(new Error(response?.error || "VEKTOR request failed."));
+        return;
+      }
+      resolve(response.result);
+    });
+  });
+}
+
+function getStorage(keys) {
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.get(keys, (result) => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+        return;
+      }
+      resolve(result || {});
+    });
+  });
+}
+
+function setStorage(payload) {
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.set(payload, () => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+        return;
+      }
+      resolve();
+    });
+  });
+}
+
+async function recordLaunch(record) {
+  const { launchHistory } = await getStorage(["launchHistory"]);
+  const list = Array.isArray(launchHistory) ? launchHistory : [];
+  list.unshift(record);
+  await setStorage({ launchHistory: list.slice(0, 300) });
+}
+
+async function updateLaunchRecord(txHash, patch) {
+  const { launchHistory } = await getStorage(["launchHistory"]);
+  const list = Array.isArray(launchHistory) ? launchHistory : [];
+  const index = list.findIndex((item) => item.txHash === txHash);
+  if (index === -1) return;
+  list[index] = { ...list[index], ...patch };
+  await setStorage({ launchHistory: list });
 }
 
 function loadTokenInfo(panel, contractAddress) {
@@ -344,6 +1031,38 @@ function getAuthor(tweet) {
 function getTweetUrl(tweet) {
   const anchor = Array.from(tweet.querySelectorAll('a[href*="/status/"]')).find((link) => link.href);
   return anchor?.href || location.href;
+}
+
+function getTweetImageUrls(tweet) {
+  const urls = Array.from(tweet.querySelectorAll("img"))
+    .filter((image) => isTweetMediaImage(image))
+    .map((image) => normalizeTweetImageUrl(image.src))
+    .filter(Boolean);
+  return Array.from(new Set(urls))
+    .slice(0, 4);
+}
+
+function isTweetMediaImage(image) {
+  const src = image.src || "";
+  const alt = image.alt || "";
+  if (!src) return false;
+  if (/profile_images|emoji|hashflags|abs.twimg.com/i.test(src)) return false;
+  if (/twimg\.com\/media|pbs\.twimg\.com\/media/i.test(src)) return true;
+  if (/^https?:\/\//i.test(src) && /image|photo|media/i.test(alt)) return true;
+  return image.closest('[data-testid="tweetPhoto"], [aria-label="Image"], a[href*="/photo/"]');
+}
+
+function normalizeTweetImageUrl(src) {
+  try {
+    const url = new URL(src);
+    if (/pbs\.twimg\.com$/i.test(url.hostname) && url.pathname.includes("/media/")) {
+      url.searchParams.set("format", url.searchParams.get("format") || "jpg");
+      url.searchParams.set("name", "small");
+    }
+    return url.href;
+  } catch (_error) {
+    return src;
+  }
 }
 
 function analyzeLaunchFit(tweet, text) {
@@ -458,15 +1177,15 @@ function clamp(value) {
   return Math.max(1, Math.min(100, value));
 }
 
-function createHeader() {
+function createHeader(action = "launch") {
   const header = document.createElement("div");
   header.className = "vektor-panel-header";
 
   const copy = document.createElement("div");
   const eyebrow = document.createElement("p");
-  eyebrow.textContent = "VEKTOR MEME LAUNCHER";
+  eyebrow.textContent = action === "ask" ? "VEKTOR LAUNCH CHECK" : "VEKTOR MEME LAUNCHER";
   const title = document.createElement("h2");
-  title.textContent = "Turn this post into a token";
+  title.textContent = action === "ask" ? "Should this become a token?" : "Prepare this token launch";
   copy.append(eyebrow, title);
 
   const close = document.createElement("button");
@@ -565,8 +1284,8 @@ function createBuySpeedDial(amounts) {
 function createBuyOutput(settings) {
   const output = createOutput();
   output.textContent = settings.walletAddress
-    ? "Pick a preset or enter a custom ETH amount. Router execution will be wired after buy API details are added."
-    : "Connect wallet from VEKTOR dashboard before executing a buy. Presets can still prepare the order preview.";
+    ? "Pick a preset or enter a custom ETH amount. VEKTOR will prepare a based.bid preview, then ask your wallet to sign."
+    : "Connect wallet from VEKTOR dashboard or when prompted. VEKTOR never asks for private keys.";
   return output;
 }
 
@@ -610,11 +1329,11 @@ function createExtraInput() {
   return input;
 }
 
-function createGenerateButton() {
+function createGenerateButton(action = "launch") {
   const button = document.createElement("button");
   button.className = "vektor-generate";
   button.type = "button";
-  button.textContent = "Generate launch plan";
+  button.textContent = action === "ask" ? "Ask VEKTOR" : "Prepare launch package";
   return button;
 }
 

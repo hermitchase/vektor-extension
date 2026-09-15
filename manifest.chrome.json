@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "VEKTOR Meme Launcher",
+  "description": "Spot viral X posts, generate meme token metadata, and prepare token launches from an overlay.",
+  "version": "0.1.0",
+  "minimum_chrome_version": "116",
+  "permissions": ["activeTab", "storage"],
+  "host_permissions": [
+    "https://x.com/*",
+    "https://twitter.com/*",
+    "http://thecheetah11.com/*",
+    "http://localhost:8787/*"
+  ],
+  "background": {
+    "service_worker": "src/background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://x.com/*", "https://twitter.com/*"],
+      "js": ["src/content.js"],
+      "css": ["src/content.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["src/page-wallet.js"],
+      "matches": ["https://x.com/*", "https://twitter.com/*"]
+    }
+  ],
+  "action": {
+    "default_popup": "src/popup.html",
+    "default_title": "VEKTOR"
+  },
+  "options_ui": {
+    "page": "src/dashboard.html",
+    "open_in_tab": true
+  }
+}

@@ -8,9 +8,18 @@
     "lint:firefox": "web-ext lint --source-dir . --ignore-files package.json package-lock.json README.md .gitignore web-ext-artifacts",
     "run:firefox": "web-ext run --source-dir . --start-url https://x.com",
     "build:zip": "web-ext build --source-dir . --artifacts-dir web-ext-artifacts --overwrite-dest",
+    "build:firefox": "node scripts/build.mjs firefox",
+    "build:chrome": "node scripts/build.mjs chrome",
+    "build:dist": "node scripts/build.mjs all",
+    "zip:firefox": "node scripts/build.mjs firefox && python3 scripts/zipdir.py dist/firefox web-ext-artifacts/vektor-firefox.zip",
+    "zip:chrome": "node scripts/build.mjs chrome && python3 scripts/zipdir.py dist/chrome web-ext-artifacts/vektor-chrome.zip",
+    "build:zips": "npm run zip:firefox && npm run zip:chrome",
     "server": "node server/index.js"
   },
   "devDependencies": {
     "web-ext": "^8.9.0"
+  },
+  "dependencies": {
+    "viem": "^2.56.5"
   }
 }

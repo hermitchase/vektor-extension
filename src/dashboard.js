@@ -2,9 +2,83 @@ const STORAGE_FIELDS = ["walletAddress", "walletChainId", "walletConnectedAt", "
 const ROBINHOOD_CHAIN_ID = "0x1237";
 
 async function load() {
-  const settings = await chrome.storage.local.get(STORAGE_FIELDS);
+  const settings = await getStorage(STORAGE_FIELDS);
   renderStatus(settings);
   renderQuickBuyAmounts(settings.quickBuyAmounts);
+  renderLaunchHistory(settings.walletAddress);
+}
+
+async function renderLaunchHistory(wallet) {
+  const container = document.getElementById("launchHistory");
+  const count = document.getElementById("historyCount");
+  const owner = document.getElementById("historyOwner");
+  container.replaceChildren();
+
+  const { launchHistory } = await getStorage(["launchHistory"]);
+  const list = Array.isArray(launchHistory) ? launchHistory : [];
+  const normalized = (wallet || "").toLowerCase();
+  const mine = normalized ? list.filter((item) => (item.wallet || "").toLowerCase() === normalized) : [];
+
+  if (!wallet) {
+    count.textContent = "0";
+    owner.textContent = "Connect a wallet to see launches from that account.";
+    container.appendChild(emptyHistory("No wallet connected."));
+    return;
+  }
+
+  count.textContent = String(mine.length);
+  owner.textContent = `Showing launches from ${shortAddress(wallet)}.`;
+  if (!mine.length) {
+    container.appendChild(emptyHistory("No launches from this wallet yet."));
+    return;
+  }
+  mine.forEach((item) => container.appendChild(createHistoryItem(item)));
+}
+
+function emptyHistory(text) {
+  const empty = document.createElement("p");
+  empty.className = "history-empty";
+  empty.textContent = text;
+  return empty;
+}
+
+function createHistoryItem(item) {
+  const row = document.createElement("div");
+  row.className = "history-item";
+
+  const head = document.createElement("div");
+  head.className = "history-item-head";
+  const title = document.createElement("strong");
+  title.textContent = `${item.name || "Untitled"}${item.ticker ? ` ($${item.ticker})` : ""}`;
+  const date = document.createElement("span");
+  date.textContent = item.createdAt ? new Date(item.createdAt).toLocaleString() : "";
+  head.append(title, date);
+  row.appendChild(head);
+
+  if (item.tokenAddress) {
+    const ca = document.createElement("code");
+    ca.className = "history-ca";
+    ca.textContent = item.tokenAddress;
+    row.appendChild(ca);
+  }
+
+  const links = document.createElement("div");
+  links.className = "history-links";
+  if (item.basedBidUrl) links.appendChild(historyLink(item.basedBidUrl, "based.bid"));
+  if (item.explorerUrl) links.appendChild(historyLink(item.explorerUrl, "Etherscan"));
+  else if (item.explorerTxUrl) links.appendChild(historyLink(item.explorerTxUrl, "Tx"));
+  row.appendChild(links);
+
+  return row;
+}
+
+function historyLink(href, label) {
+  const link = document.createElement("a");
+  link.href = href;
+  link.target = "_blank";
+  link.rel = "noreferrer";
+  link.textContent = label;
+  return link;
 }
 
 async function connectWallet() {
@@ -22,8 +96,9 @@ async function connectWallet() {
       walletChainId: response.result.chainId?.toLowerCase() || "",
       walletConnectedAt: new Date().toISOString(),
     };
-    await chrome.storage.local.set(payload);
+    await setStorage(payload);
     renderStatus(payload);
+    renderLaunchHistory(payload.walletAddress);
     flash(response.result.chainSwitchError || "Wallet connected on Robinhood Chain.");
   } catch (error) {
     flash(error.message);
@@ -35,8 +110,9 @@ async function connectWallet() {
 
 async function disconnectWallet() {
   const payload = { walletAddress: "", walletChainId: "", walletConnectedAt: "" };
-  await chrome.storage.local.set(payload);
+  await setStorage(payload);
   renderStatus(payload);
+  renderLaunchHistory("");
   flash("Wallet disconnected.");
 }
 
@@ -48,7 +124,7 @@ async function saveQuickBuyAmounts(event) {
     return;
   }
 
-  await chrome.storage.local.set({ quickBuyAmounts: amounts });
+  await setStorage({ quickBuyAmounts: amounts });
   flash("Quick buy presets saved.");
 }
 
@@ -90,6 +166,7 @@ function openX() {
 }
 
 function renderStatus(settings) {
+  settings = settings || {};
   const wallet = settings.walletAddress || "";
   const chainId = settings.walletChainId?.toLowerCase() || "";
   const ready = wallet && chainId === ROBINHOOD_CHAIN_ID;
@@ -103,6 +180,30 @@ function renderStatus(settings) {
 
   chainChip.textContent = ready ? "Robinhood Chain ready" : "Robinhood Chain required";
   chainChip.classList.toggle("ready", Boolean(ready));
+}
+
+function getStorage(keys) {
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.get(keys, (result) => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+        return;
+      }
+      resolve(result || {});
+    });
+  });
+}
+
+function setStorage(payload) {
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.set(payload, () => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+        return;
+      }
+      resolve();
+    });
+  });
 }
 
 function renderQuickBuyAmounts(amounts) {

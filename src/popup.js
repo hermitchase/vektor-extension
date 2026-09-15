@@ -1,7 +1,7 @@
 const STORAGE_FIELDS = ["walletAddress", "walletChainId", "walletConnectedAt"];
 
 async function load() {
-  const settings = await chrome.storage.local.get(STORAGE_FIELDS);
+  const settings = await getStorage(STORAGE_FIELDS);
   renderStatus(settings);
 }
 
@@ -20,7 +20,7 @@ async function connectWallet() {
       walletChainId: response.result.chainId?.toLowerCase() || "",
       walletConnectedAt: new Date().toISOString(),
     };
-    await chrome.storage.local.set(payload);
+    await setStorage(payload);
     renderStatus(payload);
     flash(response.result.chainSwitchError || "Wallet connected.");
   } catch (error) {
@@ -33,7 +33,7 @@ async function connectWallet() {
 
 async function disconnectWallet() {
   const payload = { walletAddress: "", walletChainId: "", walletConnectedAt: "" };
-  await chrome.storage.local.set(payload);
+  await setStorage(payload);
   renderStatus(payload);
   flash("Wallet disconnected.");
 }
@@ -85,6 +85,7 @@ function getChainConfig() {
 }
 
 function renderStatus(settings) {
+  settings = settings || {};
   const wallet = settings.walletAddress || "";
   const chainId = settings.walletChainId?.toLowerCase() || "";
   document.getElementById("walletStatus").textContent = wallet ? shortAddress(wallet) : "Not connected";
@@ -92,6 +93,30 @@ function renderStatus(settings) {
   document.getElementById("walletAddress").textContent = wallet || "No wallet connected.";
   document.getElementById("disconnectWallet").disabled = !wallet;
   document.getElementById("agentStatus").textContent = "Internal";
+}
+
+function getStorage(keys) {
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.get(keys, (result) => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+        return;
+      }
+      resolve(result || {});
+    });
+  });
+}
+
+function setStorage(payload) {
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.set(payload, () => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+        return;
+      }
+      resolve();
+    });
+  });
 }
 
 function shortAddress(address) {
