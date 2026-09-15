@@ -297,3 +297,7 @@ input {
   font-size: 12px;
   margin: 0;
 }
+
+[hidden] {
+  display: none !important;
+}

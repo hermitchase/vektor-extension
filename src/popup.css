@@ -173,3 +173,7 @@ button:disabled {
   min-height: 18px;
   padding-top: 8px;
 }
+
+[hidden] {
+  display: none !important;
+}

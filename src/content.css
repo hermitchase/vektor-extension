@@ -581,3 +581,7 @@
   margin-top: 5px;
   text-transform: none;
 }
+
+[hidden] {
+  display: none !important;
+}
