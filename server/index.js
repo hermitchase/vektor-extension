@@ -163,26 +163,46 @@ async function callDeepSeek(payload) {
   return data?.choices?.[0]?.message?.content || JSON.stringify(data, null, 2);
 }
 
+function orbioChatEndpoint() {
+  if (ORBIO_ENDPOINT) return ORBIO_ENDPOINT;
+  const base = process.env.ORBIO_BASE_URL || "";
+  if (!base) return "";
+  return `${base.replace(/\/+$/, "")}/chat/completions`;
+}
+
 async function callOrbio(payload) {
   const apiKey = process.env.ORBIO_API_KEY || "";
-  if (!ORBIO_ENDPOINT) throw new HttpError(503, "ORBIO_ENDPOINT is not configured on the server.");
+  const endpoint = orbioChatEndpoint();
+  if (!endpoint) throw new HttpError(503, "ORBIO_ENDPOINT or ORBIO_BASE_URL is not configured on the server.");
 
-  const response = await fetch(ORBIO_ENDPOINT, {
+  const imageUrls = Array.isArray(payload.imageUrls)
+    ? payload.imageUrls.filter((url) => /^https?:\/\//i.test(url)).slice(0, 4)
+    : [];
+  const imageParts = imageUrls.length ? await Promise.all(imageUrls.map(fetchImagePart)) : [];
+  const userContent = imageParts.filter(Boolean).length
+    ? [{ type: "text", text: buildAgentPrompt(payload) }, ...imageParts.filter(Boolean)]
+    : buildAgentPrompt(payload);
+
+  const response = await fetch(endpoint, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
     },
     body: JSON.stringify({
+      model: process.env.ORBIO_MODEL || undefined,
       messages: [
         { role: "system", content: LAUNCH_SYSTEM_PROMPT },
-        { role: "user", content: buildAgentPrompt(payload) },
+        { role: "user", content: userContent },
       ],
       temperature: 0.4,
     }),
   });
 
-  if (!response.ok) throw new HttpError(response.status, `Orbio endpoint failed with ${response.status}`);
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new HttpError(response.status, `Orbio endpoint failed with ${response.status}: ${errorBody}`);
+  }
   const data = await response.json();
   const content = data?.choices?.[0]?.message?.content || data?.output || data?.text || data?.response;
   return typeof content === "string" ? content : JSON.stringify(data, null, 2);
@@ -425,6 +445,7 @@ async function generateTokenImage(prompt) {
 
   const provider = (process.env.IMAGE_PROVIDER || "pollinations").toLowerCase();
   const attempts = [];
+  if (provider === "orbio") attempts.push(() => generateOrbioImage(clean));
   if (provider === "clawrouter" || provider === "blockrun") attempts.push(() => generateClawRouterImage(clean));
   if (provider === "minimax" && process.env.MINIMAX_API_KEY) attempts.push(() => generateMiniMaxImage(clean));
   attempts.push(() => generatePollinationsImage(clean));
@@ -438,6 +459,46 @@ async function generateTokenImage(prompt) {
     }
   }
   throw lastError || new HttpError(502, "Image generation failed.");
+}
+
+async function generateOrbioImage(prompt) {
+  const base = (process.env.ORBIO_BASE_URL || "").replace(/\/+$/, "");
+  const endpoint = process.env.ORBIO_IMAGE_ENDPOINT || (base ? `${base}/images/generations` : "");
+  if (!endpoint) throw new HttpError(503, "ORBIO_IMAGE_ENDPOINT or ORBIO_BASE_URL is not configured.");
+
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(process.env.ORBIO_API_KEY ? { Authorization: `Bearer ${process.env.ORBIO_API_KEY}` } : {}),
+    },
+    body: JSON.stringify({
+      model: process.env.ORBIO_IMAGE_MODEL || undefined,
+      prompt,
+      size: process.env.ORBIO_IMAGE_SIZE || "1024x1024",
+      n: 1,
+    }),
+  });
+  const body = await response.text();
+  if (!response.ok) throw new HttpError(502, `Orbio image generation failed: ${body.slice(0, 300)}`);
+
+  const json = JSON.parse(body);
+  const item = json?.data?.[0] || {};
+  const imageUrl = item.url || item.image_url || item?.b64_json;
+  if (!imageUrl) throw new HttpError(502, "Orbio returned no image.");
+
+  let buffer;
+  let contentType = "image/png";
+  if (String(imageUrl).startsWith("http")) {
+    const imageResponse = await fetch(imageUrl);
+    if (!imageResponse.ok) throw new HttpError(502, `Could not download Orbio image (${imageResponse.status}).`);
+    contentType = normalizeImageContentType(imageResponse.headers.get("content-type") || "") || contentType;
+    buffer = Buffer.from(await imageResponse.arrayBuffer());
+  } else {
+    buffer = Buffer.from(String(imageUrl).replace(/^data:image\/\w+;base64,/, ""), "base64");
+  }
+
+  return { dataUrl: `data:${contentType};base64,${buffer.toString("base64")}`, source: `Orbio (${process.env.ORBIO_IMAGE_MODEL || "image"})`, prompt };
 }
 
 async function generatePollinationsImage(prompt) {
