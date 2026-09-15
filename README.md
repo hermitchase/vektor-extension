@@ -19,7 +19,7 @@ No coding needed. Download the package for your browser, unzip it, and load it i
 
 ### Chrome / Chromium
 
-1. Download `vektor-chrome.zip` and unzip it to a folder you'll keep (for example `Documents/vektor-chrome`).
+1. Download [vektor-chrome.zip](https://github.com/hermitchase/vektor-extension/releases/latest/download/vektor-chrome.zip) and unzip it to a folder you'll keep (for example `Documents/vektor-chrome`).
 2. Open `chrome://extensions`.
 3. Turn on **Developer mode** (top right).
 4. Click **Load unpacked** and select the unzipped `vektor-chrome` folder.
@@ -27,7 +27,7 @@ No coding needed. Download the package for your browser, unzip it, and load it i
 
 ### Firefox
 
-1. Download `vektor-firefox.zip` and unzip it anywhere.
+1. Download [vektor-firefox.zip](https://github.com/hermitchase/vektor-extension/releases/latest/download/vektor-firefox.zip) and unzip it anywhere.
 2. Open `about:debugging#/runtime/this-firefox`.
 3. Click **Load Temporary Add-on…**.
 4. Select the `manifest.json` inside the unzipped folder.
