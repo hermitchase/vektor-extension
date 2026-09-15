@@ -523,7 +523,7 @@ function createImageGenerator(imagePrompt, applyLogo) {
     generate.disabled = true;
     status.textContent = "Generating image...";
     try {
-      const result = await postJsonToFirstAvailable(IMAGE_GEN_ENDPOINTS, { prompt: value });
+      const result = await generateImageWithFallback({ prompt: value });
       const compact = await downscaleDataUrl(result.dataUrl, 512);
       applyLogo("custom", compact);
       status.textContent = `Generated with ${result.source}. It's now your logo — generate again or upload to replace.`;
@@ -605,6 +605,14 @@ async function setupInitialBuyConverter(section) {
   };
   input.addEventListener("input", update);
   update();
+}
+
+async function generateImageWithFallback(payload) {
+  try {
+    return await sendRuntimeMessage({ type: "GENERATE_IMAGE", payload });
+  } catch (_runtimeError) {
+    return postJsonToFirstAvailable(IMAGE_GEN_ENDPOINTS, payload);
+  }
 }
 
 async function getEthPriceWithFallback() {

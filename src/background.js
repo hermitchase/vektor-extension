@@ -25,6 +25,10 @@ const ETH_PRICE_ENDPOINTS = [
   "http://thecheetah11.com/vektor-agent/api/eth-price",
   "http://localhost:8787/api/eth-price",
 ];
+const IMAGE_GEN_ENDPOINTS = [
+  "http://thecheetah11.com/vektor-agent/api/generate-image",
+  "http://localhost:8787/api/generate-image",
+];
 const ROBINHOOD_CHAIN = {
   name: "Robinhood Chain",
   chainId: "0x1237",
@@ -63,6 +67,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   if (message?.type === "GET_ETH_PRICE") {
     getEthPrice()
+      .then((result) => sendResponse({ ok: true, result }))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+
+  if (message?.type === "GENERATE_IMAGE") {
+    generateImage(message.payload)
       .then((result) => sendResponse({ ok: true, result }))
       .catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
@@ -123,6 +134,10 @@ async function prepareBasedBidFlashLaunch(payload) {
 
 async function getEthPrice() {
   return getFromFirstAvailable(ETH_PRICE_ENDPOINTS, "No ETH price service is reachable.");
+}
+
+async function generateImage(payload) {
+  return postToFirstAvailable(IMAGE_GEN_ENDPOINTS, payload, "No image generation service is reachable.", { stringifyResult: false });
 }
 
 function getStorage(keys) {
