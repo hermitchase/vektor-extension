@@ -484,7 +484,6 @@ async function generateOrbioImage(prompt) {
     body: JSON.stringify({
       model,
       messages: [{ role: "user", content: prompt }],
-      modalities: ["image", "text"],
     }),
   });
   const body = await response.text();
