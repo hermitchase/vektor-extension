@@ -118,8 +118,13 @@ server.listen(PORT, HOST, () => {
 });
 
 async function generateTokenPlan(payload) {
-  if (PROVIDER === "orbio") return callOrbio(payload);
-  return callDeepSeek(payload);
+  if (PROVIDER !== "orbio") return callDeepSeek(payload);
+  try {
+    return await callOrbio(payload);
+  } catch (error) {
+    if (process.env.DEEPSEEK_API_KEY) return callDeepSeek(payload);
+    throw error;
+  }
 }
 
 async function getEthPrice() {
@@ -445,7 +450,10 @@ async function generateTokenImage(prompt) {
 
   const provider = (process.env.IMAGE_PROVIDER || "pollinations").toLowerCase();
   const attempts = [];
-  if (provider === "orbio") attempts.push(() => generateOrbioImage(clean));
+  if (provider === "orbio") {
+    attempts.push(() => generateOrbioImage(clean));
+    if (process.env.CLAWROUTER_URL) attempts.push(() => generateClawRouterImage(clean));
+  }
   if (provider === "clawrouter" || provider === "blockrun") attempts.push(() => generateClawRouterImage(clean));
   if (provider === "minimax" && process.env.MINIMAX_API_KEY) attempts.push(() => generateMiniMaxImage(clean));
   attempts.push(() => generatePollinationsImage(clean));
@@ -463,8 +471,9 @@ async function generateTokenImage(prompt) {
 
 async function generateOrbioImage(prompt) {
   const base = (process.env.ORBIO_BASE_URL || "").replace(/\/+$/, "");
-  const endpoint = process.env.ORBIO_IMAGE_ENDPOINT || (base ? `${base}/images/generations` : "");
+  const endpoint = process.env.ORBIO_IMAGE_ENDPOINT || (base ? `${base}/chat/completions` : "");
   if (!endpoint) throw new HttpError(503, "ORBIO_IMAGE_ENDPOINT or ORBIO_BASE_URL is not configured.");
+  const model = process.env.ORBIO_IMAGE_MODEL || "openai/gpt-5-image-mini";
 
   const response = await fetch(endpoint, {
     method: "POST",
@@ -473,18 +482,16 @@ async function generateOrbioImage(prompt) {
       ...(process.env.ORBIO_API_KEY ? { Authorization: `Bearer ${process.env.ORBIO_API_KEY}` } : {}),
     },
     body: JSON.stringify({
-      model: process.env.ORBIO_IMAGE_MODEL || undefined,
-      prompt,
-      size: process.env.ORBIO_IMAGE_SIZE || "1024x1024",
-      n: 1,
+      model,
+      messages: [{ role: "user", content: prompt }],
+      modalities: ["image", "text"],
     }),
   });
   const body = await response.text();
   if (!response.ok) throw new HttpError(502, `Orbio image generation failed: ${body.slice(0, 300)}`);
 
   const json = JSON.parse(body);
-  const item = json?.data?.[0] || {};
-  const imageUrl = item.url || item.image_url || item?.b64_json;
+  const imageUrl = extractOrbioImageUrl(json);
   if (!imageUrl) throw new HttpError(502, "Orbio returned no image.");
 
   let buffer;
@@ -495,10 +502,27 @@ async function generateOrbioImage(prompt) {
     contentType = normalizeImageContentType(imageResponse.headers.get("content-type") || "") || contentType;
     buffer = Buffer.from(await imageResponse.arrayBuffer());
   } else {
+    const match = String(imageUrl).match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+    if (match) contentType = match[1];
     buffer = Buffer.from(String(imageUrl).replace(/^data:image\/\w+;base64,/, ""), "base64");
   }
 
-  return { dataUrl: `data:${contentType};base64,${buffer.toString("base64")}`, source: `Orbio (${process.env.ORBIO_IMAGE_MODEL || "image"})`, prompt };
+  return { dataUrl: `data:${contentType};base64,${buffer.toString("base64")}`, source: `Orbio (${model})`, prompt };
+}
+
+function extractOrbioImageUrl(json) {
+  const message = json?.choices?.[0]?.message;
+  if (message?.images?.length) {
+    const first = message.images[0];
+    return first?.image_url?.url || first?.url || first;
+  }
+  if (Array.isArray(message?.content)) {
+    const part = message.content.find((item) => item?.type === "image_url" || item?.image_url);
+    if (part) return part.image_url?.url || part.image_url;
+  }
+  const item = json?.data?.[0];
+  if (item) return item.url || item.image_url || item.b64_json;
+  return null;
 }
 
 async function generatePollinationsImage(prompt) {
