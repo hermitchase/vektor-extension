@@ -264,16 +264,24 @@ async function prepareBasedBidBuy(payload) {
   if (![1, 5, 10].includes(slippage)) throw new HttpError(400, "Slippage must be 1, 5, or 10 percent.");
   if (!Number(amountEth) || Number(amountEth) <= 0) throw new HttpError(400, "Enter a valid ETH amount.");
 
-  const preview = await callBasedBidApi("lbp-buy-preview", {
-    data: {
-      chainId: 4663,
-      address: contractAddress,
-      account,
-      slippage,
-      referrer,
-      amount: Number(amountEth),
-    },
-  });
+  let preview;
+  try {
+    preview = await callBasedBidApi("lbp-buy-preview", {
+      data: {
+        chainId: 4663,
+        address: contractAddress,
+        account,
+        slippage,
+        referrer,
+        amount: Number(amountEth),
+      },
+    });
+  } catch (error) {
+    if (/Token not found/i.test(error?.message || "")) {
+      throw new HttpError(400, "Quick buy only supports based.bid LBP tokens right now. This contract is not a based.bid LBP, so buy it on a DEX instead.");
+    }
+    throw error;
+  }
 
   if (preview.chain?.id && preview.chain.id !== 4663) throw new HttpError(502, "based.bid returned a non-Robinhood transaction.");
   if (!preview.address || !preview.functionName || !Array.isArray(preview.args)) throw new HttpError(502, "based.bid returned an invalid buy preview.");

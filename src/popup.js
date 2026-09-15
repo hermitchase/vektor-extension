@@ -88,10 +88,12 @@ function renderStatus(settings) {
   settings = settings || {};
   const wallet = settings.walletAddress || "";
   const chainId = settings.walletChainId?.toLowerCase() || "";
+  const ready = wallet && chainId === "0x1237";
   document.getElementById("walletStatus").textContent = wallet ? shortAddress(wallet) : "Not connected";
-  document.getElementById("walletChip").textContent = wallet && chainId === "0x1237" ? "Robinhood Chain" : "Required before launch";
+  document.getElementById("walletChip").textContent = ready ? "Robinhood Chain" : wallet ? "Switch to Robinhood Chain" : "Required before launch";
   document.getElementById("walletAddress").textContent = wallet || "No wallet connected.";
-  document.getElementById("disconnectWallet").disabled = !wallet;
+  document.getElementById("connectWallet").hidden = Boolean(wallet);
+  document.getElementById("disconnectWallet").hidden = !wallet;
   document.getElementById("agentStatus").textContent = "Internal";
 }
 

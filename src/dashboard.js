@@ -176,9 +176,10 @@ function renderStatus(settings) {
   document.getElementById("walletAddress").textContent = wallet || "No wallet connected.";
   document.getElementById("walletChain").textContent = chainId ? `${chainId}${ready ? " Robinhood Chain" : ""}` : "Unknown";
   document.getElementById("walletConnectedAt").textContent = settings.walletConnectedAt ? new Date(settings.walletConnectedAt).toLocaleString() : "Never";
-  document.getElementById("disconnectWallet").disabled = !wallet;
+  document.getElementById("connectWallet").hidden = Boolean(wallet);
+  document.getElementById("disconnectWallet").hidden = !wallet;
 
-  chainChip.textContent = ready ? "Robinhood Chain ready" : "Robinhood Chain required";
+  chainChip.textContent = ready ? "Robinhood Chain ready" : wallet ? "Switch to Robinhood Chain" : "Robinhood Chain required";
   chainChip.classList.toggle("ready", Boolean(ready));
 }
 
