@@ -301,3 +301,11 @@ input {
 [hidden] {
   display: none !important;
 }
+
+.hero-logo {
+  border-radius: 18px;
+  display: block;
+  height: 72px;
+  margin-bottom: 14px;
+  width: 72px;
+}
