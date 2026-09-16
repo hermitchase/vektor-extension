@@ -1,7 +1,7 @@
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
-const { encodeFunctionData, parseEther, toHex } = require("viem");
+const { decodeFunctionResult, encodeFunctionData, parseEther, toHex } = require("viem");
 
 loadEnvFile(path.join(__dirname, ".env"));
 
@@ -303,7 +303,7 @@ async function prepareBasedBidBuy(payload) {
     });
   } catch (error) {
     if (/Token not found/i.test(error?.message || "")) {
-      throw new HttpError(400, "Quick buy only supports based.bid LBP tokens right now. This contract is not a based.bid LBP, so buy it on a DEX instead.");
+      return prepareUniswapV2Buy(contractAddress, account, amountEth, slippage);
     }
     throw error;
   }
@@ -335,6 +335,60 @@ async function prepareBasedBidBuy(payload) {
     },
     basedBidUrl: `${BASEDBID_PLATFORM_URL}/robin/token/${contractAddress}`,
   };
+}
+
+const UNISWAP_V2_ROUTER = "0x89e5db8b5aa49aa85ac63f691524311aeb649eba";
+const UNISWAP_V2_FACTORY = "0x8bceaa40b9acdfaedf85adf4ff01f5ad6517937f";
+const WETH_ROBINHOOD = "0x0bd7d308f8e1639fab988df18a8011f41eacad73";
+const UNISWAP_V2_ROUTER_ABI = [
+  { inputs: [{ internalType: "uint256", name: "amountIn", type: "uint256" }, { internalType: "address[]", name: "path", type: "address[]" }], name: "getAmountsOut", outputs: [{ internalType: "uint256[]", name: "amounts", type: "uint256[]" }], stateMutability: "view", type: "function" },
+  { inputs: [{ internalType: "uint256", name: "amountOutMin", type: "uint256" }, { internalType: "address[]", name: "path", type: "address[]" }, { internalType: "address", name: "to", type: "address" }, { internalType: "uint256", name: "deadline", type: "uint256" }], name: "swapExactETHForTokensSupportingFeeOnTransferTokens", outputs: [], stateMutability: "payable", type: "function" },
+];
+
+async function prepareUniswapV2Buy(contractAddress, account, amountEth, slippage) {
+  const amountWei = parseEther(amountEth);
+  const token = contractAddress;
+
+  const pair = await rpcCall("eth_call", [{ to: UNISWAP_V2_FACTORY, data: encodePairCall(token) }, "latest"]).then(extractAddress);
+  if (!pair || pair === ZERO_ADDRESS) {
+    throw new HttpError(400, "No Uniswap V2 pool for this token on Robinhood Chain. Buy it on based.bid instead.");
+  }
+
+  const amountsOut = await rpcCall("eth_call", [{
+    to: UNISWAP_V2_ROUTER,
+    data: encodeFunctionData({ abi: UNISWAP_V2_ROUTER_ABI, functionName: "getAmountsOut", args: [amountWei, [WETH_ROBINHOOD, token]] }),
+  }, "latest"]).then((result) => decodeFunctionResult({ abi: UNISWAP_V2_ROUTER_ABI, functionName: "getAmountsOut", data: result }));
+  const expectedOut = amountsOut[amountsOut.length - 1];
+  if (!expectedOut || expectedOut === 0n) throw new HttpError(400, "Pool returned no output for this amount.");
+  const amountOutMin = (expectedOut * BigInt(10000 - slippage * 100)) / 10000n;
+
+  const deadline = Math.floor(Date.now() / 1000) + 1200;
+  const data = encodeFunctionData({
+    abi: UNISWAP_V2_ROUTER_ABI,
+    functionName: "swapExactETHForTokensSupportingFeeOnTransferTokens",
+    args: [amountOutMin, [WETH_ROBINHOOD, token], account, deadline],
+  });
+
+  return {
+    chain: "Robinhood Chain",
+    chainId: 4663,
+    contractAddress,
+    amountEth,
+    slippage,
+    route: "uniswap-v2",
+    transaction: { from: account, to: UNISWAP_V2_ROUTER, value: toHex(amountWei), data, chainId: "0x1237" },
+    preview: { to: UNISWAP_V2_ROUTER, functionName: "swapExactETHForTokens", valueWei: amountWei.toString(), expectedOut: expectedOut.toString(), pair },
+    basedBidUrl: `https://trade.based.bid/robinhood/${contractAddress}`,
+  };
+}
+
+function encodePairCall(token) {
+  return "0xe6a43905" + "000000000000000000000000" + WETH_ROBINHOOD.slice(2) + "000000000000000000000000" + token.slice(2);
+}
+
+function extractAddress(result) {
+  if (!result || result === "0x") return "";
+  return "0x" + result.slice(26).toLowerCase();
 }
 
 async function prepareBasedBidFlashLaunch(payload) {

@@ -928,7 +928,7 @@ function renderBuyError(output, contractAddress, error) {
   text.textContent = message;
   output.appendChild(text);
 
-  if (/lbp|token not found|not a based\.bid/i.test(message)) {
+  if (/lbp|token not found|not a based\.bid|uniswap v2|no pool|dex instead/i.test(message)) {
     const link = createExternalLink(`https://trade.based.bid/robinhood/${contractAddress}`, "Buy on based.bid");
     output.appendChild(document.createElement("br"));
     output.appendChild(link);
